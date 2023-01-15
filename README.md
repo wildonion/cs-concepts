@@ -59,7 +59,7 @@
   * actor tokio worker green threadpool and message queue for task and method broadcasting and scheduling to the pub/sub channels (tokio jobq, socket or rpc)
   * pub/sub and other zmq socket actors to broadcast from publishers to subscribers (m2m) using sockets
   * in libp2p peers can find each other using either mDNS (over LAN) or kademlia (over WAN)
- * in libp2p peers can communicate with each other based on pub/sub floodsub or gossipsub protocols on top of rpc capnp, tokio udp and tcp, websocket, webrtc, zmq like sockets (req/res, cli/srv or pub/sub) actors
+  * in libp2p peers can communicate with each other based on pub/sub floodsub or gossipsub protocols on top of rpc capnp, tokio udp and tcp, websocket, webrtc, zmq like sockets (req/res, cli/srv or pub/sub) actors
  * proxy, firewall, vpns, packet sniffer and load balancer like pingora, HAproxy, v2ray and wireshark for all layers concepts:
    * v2ray and tor protocols
    * decompress encoded packet 

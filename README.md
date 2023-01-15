@@ -28,45 +28,37 @@
 
 * tokio
 
-* riker
+* impl riker actor for each socket connection
 
-* libp2p pub/sub stack
+* libp2p pub/sub stack based on tokio tcp and udp with borsh and serde
 
-* zmq pub/sub socket 
+* zmq pub/sub socket for async I/O event streaming like audio and video
 
 * rpc capnp
 
 * hyper
 
+#### 🎭 actor concepts:
+* mailbox to receive async messages from other actors and other part of the app  
+* pub/sub channels for executing and scheduling async tasks 
+* tokio worker green threadpool to run task in other threads
+* rpc capnp based communication with outside world actors 
+* tokio message queue channles like mpsc for sharing data between threads
+* tokio event loop using select! to select an async I/O event task
+
 #### 💡 concepts:
 
 * distributed (replication) and decentralized concepts:
-  
   * search, db and routing engines like elastic, cassandra and p2p kademlia: 
-  
   * create best objective function to find the most rewarded (less cost actions) path in the network graph env (route planning) greedily using:
-  
   * hybrid tech algorithms like NN, GA and neurofuzzy(ANFIS)
-  
   * gradient optimization methods like stochastic gradient descent 
-  
   * none gradient optimization methods like GA and FA
-  
   * graph theory and heuristic search algorithms like DAG, dijkstras, floyd, bellman, DFS, BFS and A*
-  
   * reinforcement learning algorithms like qlearning using mdp and bellman equation with off and on policy methods based on markov decision process and markov chain
   
   * other algorithms using greedy, dynamic programming, backtracking, divide and conquer, recursive and brute forcing methods
-  
   * hashmap based algos like hash tables (DHT) to find closest peers inside a replication like cassandra db and p2p nodes    
-  
- * actor concepts:
-   * mailbox
-   * pub/sub channels for executing and scheduling async tasks 
-   * tokio worker green threadpool to run task in other threads
-   * rpc capnp based communication with outside world actors 
-   * tokio message queue channles like mpsc for sharing data between threads
-   * tokio event loop using select! to select an async I/O event task
   * rpc capnp for actor method based communication on two different machines like calling between smart contract actors
   * tokio tcp and udp and jobq channels for sharing Arc<Mutex<T>>: Send + Sync + 'static between actor threads in a same machine
   * actor tokio worker green threadpool and message queue for task and method broadcasting and scheduling to the pub/sub channels (tokio jobq, socket or rpc)

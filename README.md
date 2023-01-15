@@ -27,15 +27,10 @@
 #### 🛠️ tools:
 
 * tokio
-
 * impl riker actor for each socket connection
-
 * libp2p pub/sub stack based on tokio tcp and udp with borsh and serde
-
 * zmq pub/sub socket for async I/O event streaming like audio and video
-
 * rpc capnp
-
 * hyper
 
 #### 🎭 actor concepts:

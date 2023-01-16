@@ -89,6 +89,7 @@
   - autoregressive based sequence modeling to predict the future based on past events and behaviors
   - anomaly detection, 0/1/few/n-shot and meta learning
   - solving catastrophic forgetting problem using MemTransformer instead of MANN with NTM architecture LSTM based
+  - FF algorithm as an alternative to gradient descent
  #### 🛠️ models and tools
   - Transformers (https://arxiv.org/abs/2101.12037)
   - SEER (https://arxiv.org/pdf/2103.01988)
@@ -104,6 +105,7 @@
   - DayDreamer (https://arxiv.org/abs/2206.14176)
   - Algorithm Distillation (https://arxiv.org/abs/2210.14215)
   - You Only Live Once (https://arxiv.org/abs/2210.08863)
+  - Forward-Forward Algorithm (https://www.cs.toronto.edu/~hinton/FFA13.pdf)
  #### 💡 NLP concepts:
 * 🛠️ preprocessing
   - tokenization

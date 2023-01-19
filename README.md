@@ -34,7 +34,7 @@
 
 #### 🎭 actor concepts:
 * mailbox to receive async messages from other actors or other functions inside different part of the app  
-* pub/sub channels for executing and scheduling async tasks 
+* pub/sub channels for broadcasting, executing and scheduling async tasks 
 * tokio worker green threadpool to run task in other threads
 * rpc capnp based communication with outside world actors 
 * tokio message queue channles like mpsc and oneshot for sharing data between threads

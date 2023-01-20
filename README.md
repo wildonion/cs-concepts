@@ -37,7 +37,7 @@
 * pub/sub channels for broadcasting, executing and scheduling async tasks 
 * tokio worker green threadpool to run task in other threads
 * rpc capnp based communication with outside world actors 
-* tokio message queue channles like mpsc and oneshot for sharing data between threads
+* tokio message queue channles like mpsc and oneshot for sharing Arc<Mutex<T>>: Send + Sync + 'static between threads and different parts of the app 
 * tokio event loop using select! to select an async I/O event task
 
 #### 💡 concepts:

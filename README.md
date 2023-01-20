@@ -36,7 +36,7 @@
 * mailbox to receive async messages from other actors or other functions inside different part of the app  
 * pub/sub channels for broadcasting, executing and scheduling async tasks 
 * tokio worker green threadpool to run task in other threads
-* rpc capnp based communication with outside world actors 
+* rpc capnp based communication with outside world actors to call each other methods directly 
 * tokio message queue channles like mpsc and oneshot for sharing Arc<Mutex<T>>: Send + Sync + 'static between threads and different parts of the app 
 * tokio event loop using select! to select an async I/O event task
 

@@ -50,7 +50,7 @@
   * graph theory and heuristic search algorithms like DAG, dijkstras, floyd, bellman, DFS, BFS and A*
   * reinforcement learning algorithms like qlearning using mdp and bellman equation with off and on policy methods based on markov decision process and markov chain
   * other algorithms using greedy, dynamic programming, backtracking, divide and conquer, recursive and brute forcing methods
-  * hashmap based algos like hash tables (DHT) to find closest peers inside a replication like cassandra db and p2p nodes    
+  * hashmap based algos like hash tables (DHT) to find closest peers to a specific range of key inside a replication like cassandra db and p2p nodes    
   * rpc capnp for actor method based communication on two different machines like calling between smart contract actors
   * tokio tcp and udp and jobq channels for sharing Arc<Mutex<T>>: Send + Sync + 'static between actor threads in a same machine
   * actor tokio worker green threadpool and message queue for task and method broadcasting and scheduling to the pub/sub channels (tokio jobq, socket or rpc)

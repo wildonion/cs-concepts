@@ -71,7 +71,8 @@
 ## 🏗️ system
   #### 💡 concepts:
   * compiler, vm using llvm and os
-  * streaming of async I/O events compression and codec ram (buffer) algos like deflate, lz4, snappy, borsh, bson, serde and capnp
+  * streaming of async I/O events compression and ram (buffer) algos like deflate, lz4 and snappy
+  * data serialization codec and protocols like borsh, bson, serde, capnp and gql
   * runtime
   * video and audio codec, compressor and streamer like ffmpeg
   * cryptography

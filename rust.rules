@@ -1,0 +1,593 @@
+
+NOTE - we can't borrow data inside Arc as mutable if we have a an object in which one of its method has &mut self as its first argument and needs to mutate a field 
+NOTE - to solve the issue we have to put that object inside a Mutex to share and protect it between multiple threads and mutate by blocking the current thread when calling the lock() method, prevent from being in a dead lock, race condition and shared state situations
+NOTE - actors removes the need for lock-based synchronization or mutext (mutual exclusion) locking when mutating a data structure by blocking the local thread, instead they communicate with each other through defined messages or events based on message passing protocol like mpsc job queue channel
+NOTE - thread::spawn() takes a closure and tokio::spawn() takes a future and share it between multiple threads using mpsc job queue channel protocol, thus all the subtypes of the task must be Send + Sync and cloneable
+NOTE - use 'static lifetime to have a valid lifetime across .await (before and after solving the future), cause futures are Future + Send + 'static and are pinned to memory in order to be solved later thus all variables before and after them must be a variable with a valid lifetime
+NOTE - rust async feature which is zero cost async programming is not based on event loop or green threads like nodejs, it'll convert async functions and blocks to future object by bounding them to Future trait finally the future can be solved inside a single thread or a thread pool using either join!() macro, block_on function or .await (if we want to solve using .await we have to use an event loop and green thread based runtime like tokio)
+NOTE - we can't have async function inside a trait cause traits (usually object safe traits) don't have fixed size at compile time thus we can't pin their async function into memory to create a future since futures will be solved later by suspending the execution using .await  
+NOTE - closures and object safe traits are not bounded to trait Sized thus their size are unknown at compile and need runtime information to get their own size at runtime so they can't be pinned into the memory thus we can't use them as a future object by putting the async before them cause futures need to be pinned somewhere in ram to be solved later
+NOTE - futures do nothing unless we call .await on them or poll them and await can only be used inside an async block of function
+NOTE - when we put the async keyword behind a block or function means we're implementing Future<Output = ()> trait for them and turn them into a Future object and the outpute depends on the return type of that function or block
+NOTE - block_on will run a future to completion on the current thread and block the thread (executor gets stuck there) until the given future has completed (release the mutex)
+NOTE - .awaiting a future will suspend the current function's execution until the executor has run the future to completion means doesn't block the current thread, allowing other tasks to run if the future is currently unable to make progress
+NOTE - join!() is like .await but can wait for multiple futures concurrently, completing multiple futures at the same time
+NOTE - async codes will not be run immediately, but will only be evaluated when the returned future is .awaited
+NOTE - Future is an asynchronous version of Result and is solved by awaiting on them
+NOTE - Stream is an asynchronous version of Iterator and is solved using while let Ok(Some(data)) = payload.next().await
+NOTE - every type that is bounded to Future trait can be written as: async {} or async move {} async fn some_name(){}
+NOTE - we'll pin the pointer of the Future object into memory cause we want to await on it later thus it shouldn't move from the memory by replacing with and pointing to a new value of a new variable
+NOTE - threads can communicate through channels using sender and receiver like mpsc and actors through their address (Addr object) using defined events 
+NOTE - communication between threads is done using mpsc channel and end of the channel can only be owned by one thread at the time, however the sender half can be cloned and through such cloning the conceptual sender part of a channel can be shared among threads which is how you do the multi-producer, single-consumer part
+NOTE - we pinned the pointer of the Future object into memory cause we want to await on it later thus it shouldn't move from the memory by replacing with and pointing to a new value of a new variable
+NOTE - type PFuture = Pin<Box<dyn Future<Output = Result<ServiceResponse, Error>>>>; is a wrapper around a kind of pointer which makes that pointer "pin" its value in place(stack or heap), preventing the value referenced by that pointer from being moved unless it implements  
+NOTE - running multiple jobs of multiple threads using messaging channel protocol in a single processor at the same time is called multithreading
+NOTE - worker or threads are working on a single task or job at a time and in multiple producers and single consumer using mpsc channel to send a value between multiple tokio tasks we can clone the sender per task but only have one receiver. 
+NOTE - in multithreading threadpool diagram every worker (thread) inside the pool will communicate through the messaging channel (the sender and the receiver) protocol for task scheduling process
+NOTE - multiple producers or workers own the receiver (Arc<T>) and single consumer or worker get the job at a time from the receiver (Mutex<T>)
+NOTE - for each request comming from the client there is only one thread to do the job (request) at a time
+NOTE - there are no two threads handling a same job (request) at a time
+NOTE - there is only one thread get the job after it received it from the channel and it'll lock on that job until it's over, in that moment for the new incoming request another thread must handle the job and send the response
+NOTE - Arc<T> allows to have multiple ownership of the data which can't implement the Clone trait by cloning it and Mutex<T> allows to lock the thread on the data to mutate its content in multithreading context
+NOTE - none thread blocking execution between tasks or functions inside a single thread is called async programming
+NOTE - to do thread safe ops we can share the ownership across multiple threads using Ac<T> and mutate them using only one thread at a time with Mutex<T>
+NOTE - a Mutex<T> does not distinguish between readers or writers that acquire the lock, therefore blocking any threads waiting for the lock to become available. 
+NOTE - in order to share the data type (ownership) between threads the Send trait must be implemented for the data type.
+NOTE - in order to share multiple references of the data type between threads the Sync trait must be implemented for the data type.
+NOTE - Arc<T> and Mutex<T> are used in multithreading context with Send and Sync traits and RefCell<T> and Rc<T> are used in single threading context without Send and Sync traits
+NOTE - trait Send and Sync are not implemented for Rc<T> and RefCell<T> because if you clone an Rc<T> value and try to transfer ownership of the clone to another thread, both threads might update the reference count at the same time cause it can't lock the data type like Mutex<T>
+NOTE - Arc<T> will implement Send and Sync as long as the T implements Send and Sync and makes it thread safe to have multiple ownership of the same data
+NOTE - we use Arc<RwLock<T>> to share the ownership (clone) of the data type between threads and allow number of threads to read or at most allow one thread to write at any point in time.
+NOTE - impl Send (for traits and types) and Sync (for references) for all subtypes of the struct to move it between threads like db connections and AI models
+NOTE - Rc<T> allows to have multiple ownership of the data by cloning it and RefCell<T> allows to keeps track of referencing to the data and mutate its content one at a time in a single thread context
+NOTE - we can’t just pass the receiver between multiple threads cause trait Clone which is a super trait of Copy is not implemented for the receiver thus we can’t clone it cause if a type is Copy its Clone needs to return *self.
+NOTE - generally can't clone a data structure unless the trait Clone is implemented for that otherwise in order to move it between threads we have to clone it using Arc.
+NOTE - the receiver of tokio mpsc channel is shareable between tokio::spawn() threads so we don’t need to take an atomic reference and put it inside the Mutex.
+NOTE - multiple producer means multiple threads own the receiver and single consumer means only one of them can mutate and get the job or task from the receiver at a time.
+NOTE - we have to take an atomic reference from the receiver using Arc in order to clone it for passing between multiple threads and for mutating it we have to put it inside a Mutex to insure that only one thread can change the content of the receiver at a time. this is done by waiting on the receiver until a job or task becomes available to down side of the channel then locking on the receiver to acquire the mutex.
+NOTE - thread safe coding is about to putting the shareable receiver (cloned with Arc) inside a Mutex in order to lock on the incoming task from the sender to prevent other threads from mutating the task at a time.
+NOTE - we have to pass by reference using & in function param to borrow the ownership of the type like passing Vec and String by & to borrow a slice of them and coerce them to &[u8] and &str
+NOTE - bytecodes like .wasm and .so are compiled codes (on RAM instructions) from other langs must be loaded into a buffer to execute them on RAM using VMs
+NOTE - big-endian system stores the most significant byte of a word at the smallest memory address and the least significant byte at the largest (the most right hex will be stored at the bottom of the stack)
+NOTE - null pointer optimisation means that Option<&T> is exactly the same size as &T instead of requiring an extra word or 8 bytes tag cause null pointer optimization takes advantage of the fact that a reference can never be null, and instead uses that as a special value to represent the tag
+NOTE - None takes up exactly as much memory as if it were Some<T>. This is because Rust needs to know the Size of the Data you want to store and how much space it needs to allocate and for enums, which an option is, that means the space they need is as much as the largest variant And although you know that None will not change in this case, you could also swap it out with Some<T> any time later and then that new value needs to fit into that space
+NOTE - 16 bits means 2 pack of 8 bits, 8 bits means 1 pack of 8 bits, 32 bits means 4 pack of 8 bits
+NOTE - 4 bits -> 1 hex and 8 bits -> 2 hex -> 1 byte and 256 bits -> 64 hex -> 32 bytes 
+NOTE - we can use as_ref() method on Options to borrow the content inside the Option instead of using clone() method
+NOTE - as_ref() method prevent from moving and make a copy from the original type inside the wrapped type like Option, Arc or Result
+NOTE - as_ref() converts what's inside a wrapper (an &Option or &Arc or &Result) to &T and living the original types in place
+NOTE - utf8 bytes (&[u8]) is on range 0 to 255 in which we can represent image pixels or code ascii char instead; utf16 or utf32 support more range of code ascii chars
+NOTE - raw pointers * and references &T function similarly, but references are always safe because they are guaranteed to point to valid data and it's not a dangling reference due to the borrow checker
+NOTE - one byte or 00000000 or 0x00 - every 4 digits in one byte is a hex number and every 3 digit in one byte is a oct number
+NOTE - 32 bytes means 256 bits and 64 characters cause every 4 digits in one byte represents one digit in hex thus 00000000 means 0x00 which is 2 characters in hex and 32 bytes hex string means 64 characters
+NOTE - one byte is the range 00000000 - 11111111 in binary, or 0x00 - 0xFF in hex, one byte is represented in hex as a 2 character string therefore, a 32 byte hex string is 64 characters long
+NOTE - the size of a String allocated in memeory is 24 bytes; 64 bits or 8 bytes or usize (usize which is big enough to hold any pointer or offset) for each of pointer, len and capacity on 64 bits system
+NOTE - the size of the &str allocated in memeory (heap or binary or stack) is the total length of the that str itself for example the size of a none emoji word like "wildonion" is 9 bytes 1 byte for each but the size of "wildn🥲oion" is 13 bytes which is 4 bytes more than the "wildonion" which is because of 🥲 emoji 
+NOTE - the size of the &str allocated in memeory (heap or binary or stack) is equals to the size of that str in bytes: size_of_val("wildonion") == size_of_val("wildonion".as_bytes()) 
+NOTE - the size of a unit struct like Test (std::mem::size_of::<Test>()) is 0
+NOTE - a codec is basically an algorithm which will map or deserialize the buffer filled of utf8 bytes from memory into an object and visa versa
+NOTE - there is no way for the compiler to guarantee that you always read the correct type (that is, the most recently written type) from the union
+NOTE - some types are clever and pack a bit tighter, such as Option<&T> which is uses the null pointer optimization
+NOTE - an enum is the size of the maximum of its variants plus a discriminant value to know which variant it is, rounded up to be efficiently aligned. The alignment depends on the platform
+NOTE - an enum and its tag size with one variant is equals to the size of that variant
+NOTE - an enum size wit more than one variant is equals to a variant with largest size + 8 bytes tag cause 
+NOTE - enum size with a single f64 type variant would be 8 bytes and with four f64 variants would be 16 bytes cause one 8 bytes wouldn't be enough because there would be no room for the tag.
+NOTE - enum has an extra size like 8 bytes for its tag which tells use which variant we have right now, but rust uses null pointer optimization instead of allocating 8 bytes tag 
+NOTE - null pointer optimization means a reference can never be null thus rust uses that reference or pointer as the tag with 8 bytes length for the current variant 
+NOTE - enums use some extra memory to keep track of the enum variant, with unions we keep track of the current active field ourself
+NOTE - all fields of a union share common storage and writes to one field of a union can overwrite its other fields, and size of a union is determined by the size of its largest field
+NOTE - usize gives you the guarantee to be always big enough to hold any pointer or any offset in a data structure and its size is depended on how much size it takes to reference any location in memory, on a 32 bit target usize is 4 bytes and on a 64 bit target usize is 8 bytes, while u32 can be too small on some architectures
+NOTE - procedural macros enables other prgrammers to use our trait on our own struct
+NOTE - macros are expanded before the compiler interprets the meaning of the code, so a macro can, for example, implement a trait on a given type
+NOTE - function gets called at runtime and a trait needs to be implemented at compile time
+NOTE - for those types specially abstract types like object safe traits which don't have size at compile time and they are not bounded to Sized trait, we have to point them using a pointer like Box<dyn Trait> or &dyn Trait
+NOTE - into_something methods consumes self, avoiding clones as much as possible, and to_something takes &self, potentially cloning some data
+NOTE - web::Payload in actix is used to extract the streaming of binary data from the request
+NOTE - we can’t copy the heap allocated data cause if a data with a large length and capacity is gonna be on the heap the copy of that data will face us into a runtime performance issue
+NOTE - since compiler will free the memory once the heap allocated data get dropped as soon as their scope is finish; we can’t copy the heap allocated data despite the unknown size of them in compile time cause by coping we have two pointers pointing to a same location inside the heap and by dropping the data from the heap we’ll have two dangling pointers pointing to no where which will face us into a double free pointer issue
+NOTE - ptr, len and capacity (extract them using into_raw_parts() + build the variable using from_raw_parts() ) of a variable will be stored on the stack and if the data was bounded to Sized trait its value will be stored on the stack too otherwise on the heap
+NOTE - ptr, len and capacity of the String are stored on the stack and the data will be stored on the heap which is a buffer allocate in the binary to the str data cause String is a wrapper around the str
+NOTE - String is of type Vec<u8> which will be coerced to &[u8] at compile time and every 8 bits is 1 byte so every char in String can be 1 byte in range utf8 means 0 to 255 and byte indices is string slices or &str to some parts of the String
+NOTE - we use string slices (&Some_String[0..n] for example) to access some parts of the String cause some char might be 2 bytes long thus we can't access them like &Some_String[0] cause the first char is 2 bytes means it's of type utf16
+NOTE - &String is a pointer to the whole String and a wrapper over a Vec<u8> and &str is a pointer to that part of the String (which is a str) on the heap buffer
+NOTE - String is a growable, ownable heap-allocated data structure that owns the actual full str buffer on the heap it manages and it can be coerced to a &str
+NOTE - &str substrings (a slice of String) are just fat pointers to that buffer (allocated by String) on the heap which also contains the length of the type
+NOTE - a String wraps and manages a dynamically allocated str as backing storage since str cannot be resized, String will dynamically allocate/deallocate memory
+NOTE - a &str is thus a reference directly into the backing storage of the String, while &String is a reference to the “wrapper” object
+NOTE - &str can be used for substrings, i.e. they are slices, a &String references always the whole string (a reference to the whole “wrapper” object)
+NOTE - it was str at first and because of its unknown size, String was created to store the str on the heap and &str is a reference to that heap
+NOTE - passing heap variables like String to function require to be clonned in order to use them later on cause by passing them through the function their lifetime and ownership get dropped
+NOTE - using & in function parameters or struct members requires lifetime parameter to prevent from dangling pointer issue so lifetime are specified when a struct or a function is holding a reference to a value
+NOTE - returning references need lifetime like returning &'static [u8] in function signature cause once functions are executed, they are popped off the execution stack and resources are de-allocated
+NOTE - the only place that we can return a reference from the function is inside the struct method using &self to return a field owned by the struct not the method itself like returning &self.name
+NOTE - returning a refernce to a variable like x which is owned by the function or the scope is not safe because that variable will be dropped at the end of the block and the reference &x will be pointing to some garbage data which is a dangling pointer
+NOTE - we aren't allowed to use a reference beyond how long the referred-to value is valid at its current memory location, means can't return a reference to a variable owned by the function cause the variable the reference is beyond the variable lifetime at its current memory location
+NOTE - once the program is ran there are limited size of the memory is allocated for the code called buffer and for each variable definition the stack will pop the old one after it's done with its lifetime and push the new one in the location of the old one, in order the value of that variable doesn't move or be a pointable value by a pointer such as Box we need to pin it into the stack or the heap
+NOTE - in order to stain the value of a variable inside the stack which is referenced by a pointer we have to pin that pointer like Pin<P> which it's pointing to the memory location of that variable meaning it cannot be moved elsewhere and its memory cannot be deallocated until it gets dropped
+NOTE - closures are lazy and do nothing unless called and compiler doesn’t know how much space it will need to store the closure so in order to return the closure in function signature we must put the closure inside the Box<dyn> or use &dyn
+NOTE - when we use dyn inside the box an object safe trait or closure after that must come cause they are not bounded to trait Sized and we don't know what type we are implementing this trait for
+NOTE - Vec<&dyn Fn(i32) -> i32> is a vector of i32 closures because Fn is an object safe trait which is not bounded to Sized trait means compiler doesn't know how much space it will need to store the closure thus we must get a reference to Fn using &dyn or Box<dyn Fn(i32) -> i32>
+NOTE - Fn, FnMut, and FnOnce can be bounded an object safe trait bounds to closure arguments
+NOTE - Fn trait is an object safe trait, because of unknown size at compile time it needs to be inside the Box<dyn Trait_Name>
+NOTE - object safe traits are not bounded to trait Sized thus they need to be inside the Box<dyn Trait_Name>
+NOTE - object safe trait won't return Self or have generic params in its methods if so then some space shoul have been allocated inside the memory for Self or that generic param and it wasn't no longer an abstract type
+NOTE - &T and &mut T will be coerced into raw pointers *const T or *mut T respectively
+NOTE - Vec<u8> is coerced to &'a [u8] with a valida lifetime and String is coerced to &str cause of unknown size (not bounded to Sized trait) for both of them at compile time a reference will be taken from them which contains a pointer to the location of the data inside heap saved on stack along with capacity and len    
+NOTE - we take a reference from a variable using & which is called smart pointer, by doing this we're borrowing the value of the variable instead of taking its ownership and the reference that just has taken from the variable contains a pointer stored on the stack which is a hex address to the memory location of the data stored on heap or stack.
+NOTE - a pointer contains a reference to the location address of the data on the heap or stack and we can pin its value in place using Pin to prevent the value from being moved 
+NOTE - trait Sized is implemented for all types that their size are known at compile time like &str and String but it's not bounded to str cause str has no fixed size at compile time
+NOTE - dynamically sized types or trait objects which have unknown size at compile time must be inside a Box<dyn Trait> or behind a pointer like &dyn Trait or &str in order the compiler knows the size and the address of them
+NOTE - if we want to say that T may or may not be Sized we must bound it to ?Sized and pass the variable of that type as a referene cause compiler in this stage can't detect the size so we must take a reference from that variable which the pointer has the length of that type and the address at compile time
+NOTE - all number values are stored in stack plus the address of the heap pointer of other data structure than numbers like String and Box
+NOTE - multiple mutable references to the same variable is not ok, because any one who is just reading the data has the ability to affect anyone else’s reading of the data.
+NOTE - multiple immutable references to the same variable is ok, because no one who is just reading the data has the ability to affect anyone else’s reading of the data.
+NOTE - keep track of multiple immutable and mutable borrows or owners or references at the same time using Rc<T> and RefCell<T>
+NOTE - due to the ownership and borrowing rules we can use Rc<T> to count the references or borrowers or owners of a value which the other variable is pointing to the value
+NOTE - due to the lack of changing the immutable references at runtime we can use RefCell<T> to mutate an immutable value at any point in runtime
+NOTE - we used RefCell<T> to allow us to mutate contents one in a time inside an Rc<T> using RefCell<Rc<T>> pattern and Mutex<T> to mutate contents inside an Arc<T> using Arc<Mutex<T>> pattern
+NOTE - Arc<T> provides shared ownership of a value of type T, allocated in the heap, invoking clone on Arc produces a new Arc instance, which points to the same allocation on the heap as the source Arc
+NOTE - a RwLock<T> will allow any number of readers to acquire the lock as long as a writer is not holding the lock.
+NOTE - the downgrade method can be used to create a non-owning Weak pointer. A Weak pointer can be upgraded to an Arc, but this will return None if the value stored in the allocation has already been dropped, in other words, Weak pointers do not keep the value inside the allocation alive; however, they do keep the allocation (the backing store for the value) alive.
+NOTE - a cycle between Arc pointers will never be deallocated. For this reason, Weak is used to break cycles, for example a tree could have strong Arc pointers from parent nodes to children, and Weak pointers from children back to their parents.
+NOTE - references (a pointer to parent location on memory) taken from parent by children is strong cause multiple children in a graph have one parent and own a single node and if we remove the parent all its references and owners (children) must be dropped.
+NOTE - references (a pointer to child location on memory) taken from children by parent is Weak (non-owning reference or raw pointer) cause all children have only one parent and if we remove a child, the parent strong reference count shouldn't change due to cyclic reference and memory leak prevention.
+NOTE - Weak reference are non-owning reference means that by removing a child from the parent we might have dangling and an empty reference from the removed child to the parent pointing to no where (parent)!
+NOTE - take a reference from parent by children which is a pointer to the location of the parent in memory must be Weak cause if we remove the child which has a reference taken from the parent we'll have a dangling reference (pointer) from (to) parent which is a raw pointer without any owner and the Weak counter of parent will decrease by one! cause the child that was pointing to the pranet is removed.
+NOTE - the orphan rule implies that the trait must be imported inside the crate that we have the struct in there in order to use the methods of that trait on an instance of the struct
+NOTE - imagine crate A defines trait Hash and crate B defines struct Pass, based on orphan rule we can't impl Hash for Pass inside crate C other than those crates because it might be some trait with that name exist inside another crates or our C crate for our struct
+NOTE - the Hash trait or Pass struct must be local to our crate C means we have to define either the trait Hash or struct Pass inside our crate C or we can wrap around the Pass struct with another struct and impl trait Hash for it inside our crate C 
+NOTE - every type is bounded to some traits like Sized, Clone, Future and Display
+NOTE - we can bound some traits to a type in function signature using where clause like where T : Clone + Display
+NOTE - we can control the behavior of each type using their methods and by implementing traits for them
+NOTE - a trait method can be override inside the implementation block of the type means two types can use a same method signatures of the trait but with different body implementation inside each
+NOTE - clone data structure if you want to move them between threads so trait Clone must be implemented for them otherwise clone them using Arc.
+NOTE - every Copy type is also required to be Clone and if T: Copy, x: T, and y: &T, then let x = y.clone(); is equivalent to let x = *y;
+NOTE - when we derive a Copy implementation Clone is also required cause it's a super trait of Copy.
+NOTE - if neither Copy nor Clone is not implemented for the object by moving it into a function we loose the ownership of the value of that object; we can borrow the ownership by taking a pointer to it using &
+NOTE - if a type imeplements trait Copy means we can clone it (cause trait Clone is a super trait of Copy) and also assign the variable into another one without losing the ownership of our variable
+NOTE - if a type doesn't implement trait Copy means that type is a heap allocated structure and we can use either & to borrow its ownership or by clonning it (trait Clone must be imeplemented) and once we've cloned it using clone() method we'll get a Self from the type (like to_owned() method)
+NOTE - trait Copy is meant to be implemented for "cheap" types, such as u8 in the example. If you write a quite heavyweight type, for which you think a move is more efficient than a copy, make it not impl Copy and impl Clone. Note that in the u8 case, you cannot possibly be more efficient with a move, since under the hood it would probably at least entail a pointer copy -- which is already as expensive as a u8 copy.
+NOTE - trait Copy is not implemented for &mut T because if we had the Copy trait for them we could have multiple copy of them in every where and they could change the data of what they have borrowed for thus the reference count of each variable would be out of control inside the current thread, those references don't want a copy of data, they want to own and mutate the data inside what they have borrowed thus we can't mutate the variable itself while its mutable pointer is changing the data inside of it
+NOTE - trait Copy is not implemented for &mut T because we can have only one mutable reference at a time, thus by copying a mutable variable (assuming its on the stack and its size specified on compile time and is bounded to Sized trait) at runtime we'll panic!
+NOTE - trait Copy is implemented for &T like &String and &str cause we can have multiple immutable references at a time, thus by copying an immutable variable we'll not panic and will borrow them rather than taking their ownership 
+NOTE - trait Drop is implemented for those type which trait Copy are not implemented for them means is implemented for heap allocated data structure.
+NOTE - trait Copy is not implemented for the heap allocated data structure cause having two references (immutable, can't have mutable cause they are not allowed at the same time) pointing to a same data on the heap two times at the same time will face a double free pointer issue, means trying to free a part of the memory two times is unsafe.
+NOTE - trait Copy is not implemented for the heap allocated data structure cause they don't have known fix sized at compile time and are not bounded to Sized trait.
+NOTE - trait objects must be inside <Box dyn Trait> which is a smart pointer to a memory location on the heap, cause this trait doesn't have any known fixed size at compile time and we don't know for what type we're implementing this trait for thus we have to use the dyn keyword which is called dynamic dispatch in rust and has runtime overhead.
+NOTE - some of the types in rust are not known at compile time like str, u8 and traits which their size are not known for the compiler until runtime information catch by the compiler and due to this reason we put them inside Box or take a reference from them like &[u8] to get a smart pointer to their memory location and where their data are put in at compile time.
+NOTE - trait Clone is implemented for those types that their data are on the heap and trait Copy is implemented for those types that their data are on the stack
+NOTE - changing the value of the varibale using its pointer or its shallow copy and both the pointer and the object must be defined mutable; using & or moving the object into a new scope when the Copy trait is implemented for the type is also a shallow copy 
+NOTE - making a deep copy from the object is done by cloning the object using clone() method (trait Clone must be implemented) to prevent double free pointer issue from happening
+NOTE - object safe traits don't return the type that we're implementing the trait for in their methods, means if a trait returns the Self in one of their methods' return type that trait is not object safe trait and also traits with associated methods are not object safe trait
+NOTE - trait object have runtime overhead due to their implementation on various types at runtime; Sync and Send are unsafe object traits and we have to use unsafe keyword to implement these traits for the type.
+NOTE - if any method of the trait bounds to a Sized type or have generic type(every types are bounded to Sized trait by default unless we specify the unknown size using ?Sized trait) its methods, that trait is not object safe trait cause trait objects don't know about their implementor type until runtime and also Sized bound is a compile time overhead.
+NOTE - object safe trait can be implemented for a type using Box<dyn Trait> or &dyn Trait
+NOTE - when we derive a Copy implementation Clone is also required cause it's a supertrait of Copy.
+NOTE - trait Clone is an example of none object safe trait cause its implementor types' data are stored on heap and we can't use it like Box<dync Clone> due to the reason that the trait will return the Self in its method, thus it's not safe to use it inside the box for different implementors and by using Clone trait we'll have heavy runtime overhead for big size objects!
+NOTE - if Copy trait is implemented for a type means we can move that type without losing the ownership otherwise we'll lose the ownership and we must clone the data 
+NOTE - we can't move that type if the Clone trait wasn't implemented for that type in this case we have to take a reference to the location of that type inside the heap
+NOTE - in order to use the Copy trait the trait Clone must be implemented cause Clone is a supertrait of Copy
+NOTE - if we don't use & the value will be moved by passing into the new scope unless the Copy trait was implemented for or we can prevent it from moving using clone method if the Clone was implemented for 
+NOTE - ownership rule says that every value has an owner which is the type itself and in order to have it inside other scopes either we have to copy (it's ok to move it into other scope if Copy trait is implemented for that), borrow it using & or clone it to prevent it from moving when we're entring into a new scope cause rust will drop the type's lifetime after entring into a new scope since it doesn't obey the garbage collection rule
+NOTE - define the trait and struct methods as &mut self (a shared mutable pointer or reference) if you want to mutate and update their fields otherwise &self &mut self (a shared immutable pointer or reference)
+NOTE - &self means all fields in struct are in their borrowed form thus we have a shared reference of them inside the lifetime of the struct object also we'll have a valid lifetime for object after calling its methods in current scope which won't be moved by first call
+NOTE - & is used for borrowing and taking a referencing to the location inside the memory of an unknown sized type like [u8] slices
+NOTE - can't return &[u8] or [u8] in function signature due to unknown size of slice and lifetime constraints we could return either Vec<u8> or Box<[u8]> since since Vec<u8> will be coerced to &'a [u8] with a valid lifetime (like 'a) at compile time
+NOTE - if the size of the u8 is not specified we have to either use & with lifetime or put it inside a Box in which the lifetime will be handled automatically by the Box itself
+NOTE - generic type is needed for function returns and types and for those types that haven't fixed size in compile time we have to put them inside the Box or take a reference to them to borrow them using & and the size of the Box is usize and the size of the Box inside heap is the size of the Box value which T inside the Box and the Box will have a default valid lifetime for any type inside of it
+NOTE - [u8] must have a known size like [u8; 8] for 8 digits or chars otherwise we have to take a pointer to it like &[u8] and pointers need a valid lifetime if there are inside struct field or function params
+NOTE - #[..] applies an attribute to the thing after it and #![..] applies an attribute to the containing thing like the whole crate stuff
+NOTE - usize is how many bytes it takes to reference any location in memory, on a 32 bit target, this is 4 bytes and on a 64 bit target, this is 8 bytes
+NOTE - we can't return a trait inside the function cause the compiler needs to know how much space every function's return type requires and this can't be specified at compile time cause different implementations of a trait need different amount of memory
+NOTE - to return a trait inside the function we have to put it inside a Box with a dyn keyword (due to the dynamic size of the trait) cause a Box is just a reference to some memory in the heap and a reference has a statically known size thus compiler can guarantee it points to a heap allocated the trait
+NOTE - Box is a none dangling pointer with a usize size and will allocate T size (Box<T>) on the heap to store what's inside of it and allocate nothing on the heap if T is unsized   
+NOTE - size of the value inside any smart pointer is equals to the size of the smart pointer itself which is usize
+NOTE - the size of a boxed value or size_of_val(&Box::new(10)) is equals to the usize (8 bytes or 4 bytes) which is the size of the Box which is just a pointer and a pointer takes usize to reference any location inside the memory 
+NOTE - Box<T> is one of the smart pointers in the Rust standard library, it provides a way to allocate enough memory on the heap to store a value of the corresponding type, and then it serves as a handle (contains more bytes other the actual size of that tyep), a pointer to that memory
+NOTE - Box<T> owns the data it points to and we can use dereference operator to reach their contents; when it is dropped, the corresponding piece of memory on the heap is deallocated
+NOTE - when the value of a type moves (to new scope, function params or into another variable) the runtime will generate a new location inside the ram and the old one will be popped from the stack thus the old type is no longer exists inside the code cause it's lifetime has been done inside the stack we can solve this issue with cloning or borrowing the ownership of the value of that type using &
+NOTE - don't need a garbage collector cause based on the ownership system in rust value will be moved or dropped from the ram (its lifetime is no longer available in the previous scope) when you move into the new scop or a new variable or passing it to the function as a parameter unless you clone it or the Copy trait has been implemented for that type or borrow it using &
+NOTE - traits, macros, Box<dyn Trait> &dyn Trait, mpsc job queue channel, ptr + len + cap, pointers and clone (deep copy) for borrowing instead of moving the ownership, 
+NOTE - lifetimes to prevent dangling pointers from returning + every pointer has its own lifetime
+NOTE - encoder like (de)serializing from or (d)ecoding into utf8 bytes or mapping using union, borsh and serde codec,  
+NOTE - unsafe from and into raw parts, little and big endian, raw pointers, mutate `a` using its pointer `b` and vice versa
+NOTE - add features to a module to include it in Cargo when installing that module like { version = "0.14", features = ["full"] } + cargo [features] flag
+NOTE - associated type and default type parameter and monomorphization for generic type (no runtime cost)
+NOTE - all rust smart pointers (Rc is unsafe and Send is safe for multithreading contexts)
+NOTE - Arc<Mutex<Whatever>> in multi thread (thread safe) and whatever object is shreable + sync, send and static for futures
+NOTE - Rc<RefCell<Whatever>> in single thread (none thread safe) and whatever object is not shreable
+NOTE - actix actors are based on event driven model in which future object like message events will be transfered by the event handler asynchronously between threads based on an event driven runtime like tokio 
+NOTE - async write and read from io socket stream and into buffer 
+NOTE - channel for async signal message and data passing between threads (data must be shareable and clonable)
+NOTE - in which an event (might be a future object) loop waits for the event to be called and triggered by an event handler specified by the scheduler
+NOTE - pointer to a variable is pointing to the location of that variable inside the heap or stack
+NOTE - & is used to borrow the ownership and Copy trait is a shallow copy
+NOTE - Clone is a deep copy and is used for heap data cause Copy trait is not implemented for them
+NOTE - pointer is a reference to the location of the variable to borrow the ownership of that variable and prevent from moving
+NOTE - mutable pointers can mutate the value inisde the variable if and only if the variable and pointer defined mutable
+NOTE - we can have only one mutable pointer and multiple immutable pointers at the same time
+NOTE - can't iterate through a tuple with different data types cause the initial address for each type is different and we can't start from the first element address and iterate till the end of the tuple address
+NOTE - Every references has associated its lifetime and the Rust compiler proves that the usage of the reference never exceed its lifetime. 
+NOTE - Safe Rust cannot touches dangling reference even by accident.
+NOTE - &'static means we're borrowing T for the entire lifetime of the process 
+NOTE - can't return references from the function cause that pointer is ownded by the current function and its lifetime will be dropped once the function return
+NOTE - if Copy trait wasn't implemented for a data type we can't pass that data by reference and we have to clone it
+NOTE - solve io streaming of futures using await (none blocking) or block_on() method on each chunk of bytes in while let syntax like while let Ok(chunk) = io_future_bytes.await{}
+NOTE - use tokio channels like mpsc job queue channel or oneshot for message passing and moving Arc-ed or cloned and Mutex-ed data structures between rust native and tokio::spawn() method (async task spawning method) green threads 
+NOTE - future objcets will be created by putting async keyword behind functions, blocks and closure bodies and are bounded to Future trait and can be solved using block_on() method, .await keyword and join!() macro (in async function)
+NOTE - thread::spawn(|| async move{}) and tokio::spawn(async move{}) return a JoinHandle 
+NOTE - if the trait Copy was implemented for a type means we can move it without loosing its ownership if it wan't we have to clone it using either trait Clone or Arc 
+NOTE - & will borrow the ownership of the type and needs an specific lifeimte for the entire of the program in order to be a valid and none dangling pointer and always pass by reference to borrow the type to prevent from moving and cloning  
+NOTE - shared reference for a type means that we have multiple owner across the whole app runtime and other threads and we can count them by putting the type inside a Rc<T> smart pointer also we can't dereference them
+NOTE - shared reference can't dereference between threads and can't move out of it cause by moving or dereferencing it it'll lose its ownership and lifetime while some methods and threads are using it; we can sovle this using as_ref() method wich converts a &wrapped type into &T or by cloning the type
+NOTE - load balancer distributes incoming client requests among a group of servers, in each case returning the response from the selected server to the appropriate client
+NOTE - borrowing the Option's content using as_ref() method and mutable reference will borrow the variable as mutable 
+NOTE - multithreading is about spawning n threads in overall to handle all incoming tasks from a process like evert socket connections inside a free thread by locking the mutex or the task inside a free thread and one task per available thread
+NOTE - since mutable pointer to a type can change the value of the type thus if we want to mutate the struct field in its methods without losing its ownership we have to use &mut self as the first param of methods
+NOTE - &self is a pointer to all struct fields and mutating the struct fields is done using &mut self (a mutable pointer to struct fields) and dereferencing &self or &mut self (to get the value of the pointer) will be done automatically by the compiler 
+NOTE - if you want to add a pointer with lifetime use &'a Type and if you don't want the lifetime use *const Type (raw pointer)
+NOTE - borrow checker checks for valid lifetime of a pointer which is &T (borrowed of T) to avoid having dangled pointer
+NOTE - struct can own its field like there is not pointer to a type like &'s str and we'll pass self to its first parameter method or it can owned a borrowed field like &'s str
+NOTE - we can solve futures by awaiting on them to solve impl Future<Output=()>
+NOTE - we have to put the heap data types inside the Box like closures and traits
+NOTE - pointer to the heap to borrow the data inside the heap cause we don't have a specific size at compile time for the heap data structures
+NOTE - async message passing (share clonable data) between threads using channels
+NOTE - Rust can handle multi proccessing also if all jobs or threads inside a single core are busy it'll move into another cpu core
+NOTE - the return type of each arm in match and each clause in if let must be the same unless we use some panic messages
+NOTE - if the type was dropped from the memory then any reference to it is invalid due to the fact that the pointer might be a dangling pointer
+NOTE - due to avoiding use of dangling pointer in rust in order to return pointer in function body we could:
+    0) if we do not allocate memory on the stack inside the function body we can return references to the result which already lives in memory
+    1) return by value like returning T instead of &T
+    2) return by reference with a defined lifetime for the return type to extend its lifetime outside of the function cause we can not return a reference pointing to a local variable inside the function
+    3) return by reference using the same lifetime of one of the passed in arguments which is a (mutable) reference (&T or &mut T and T can be any type) to the argument to copy the value that we want to create into the caller's memory space
+    4) return a Box which contains the T inside of it which has the address to the location of the T inside the heap
+NOTE - in order to return a value (indeed, any value) from a function, it has to be either copied to a memory location that the function's caller has access to, 
+    or placed in a special memory location called "the heap," which is one particular place that each of your functions has access to and isn't destroyed the same way that a function stack is
+NOTE - the reason you can't do this is because bindings (variables) that you define in a function only live for as long as the function is executing,
+    this isn't specifically a Rust semantic but really a more general semantic of how (most or all?) modern computers work. When a function is called, 
+    a block of memory is created for that function to store temporary data in, called "a function stack." When that function finishes, this function stack is, 
+    for all intents and purposes, "destroyed" by the operating system, invalidating whatever was contained within it so that 
+    the memory can be reused by other functions in the future.
+NOTE - shared ref is an immutabe reference to a type which can be shared across threads and can't be deref and exclusive ref is a mutable reference to a type which can be one of them inside avilable inside a scope
+NOTE - a variable's lifetime is how long the data it points to can be statically verified by the compiler to be valid at its current memory address
+NOTE - lifetimes must be applied to those types that want to borrow another type like references or point to a data location inside the ram and this fact makes self-contained types appear to satisfy any lifetime, but in fact they ignore all lifetimes
+NOTE - when we use & in struct methods we can use the lifetime of the self to return pointer to a type from the method body 
+NOTE - wehn we use & in struct methods means we can call other methods inside the scope where the instance is, right after calling a method on the instance
+NOTE - it's ok to setup app storage and api object inside each controller instead of setting them up in main.rs to have single instance of them in the whole lifetime of the app since rust doesn't have garbage collector thus based on borrowing and ownership rules each app storage and api object inside each controller function lifetime will be valid till the end of function scope or body   
+NOTE - 'static trait bound means the type does not contain any non-static references, the receiver (function or the struct field) can hold on to the type for as long as they want and it will never become invalid until they drop it also any owned data always passes a 'static lifetime bound, but a reference to that owned data generally does not
+NOTE - based on orphan rule future traits must be imported to call their methods on hyper instances of the request and response body struct
+NOTE - it's ok to bound the generic type inside the function to traits and a valid lifetime (trait bound lifetime like 'static) without the Box but in order to define a generic type from traits or closures (closures are marked as traits) they must be inside the Box with dyn keyword behind them plus a valid lifetime ('static or 'other) cause object safe traits are no bounded to Sized traits and each closure generates a unique anonymous type for the closure's value  
+NOTE - None takes up exactly as much memory as if it were Some<T>. This is because Rust needs to know the Size of the Data you want to store and how much space it needs to allocate and for enums, which an option is, that means the space they need is as much as the largest variant And although you know that None will not change in this case, you could also swap it out with Some<T> any time later and then that new value needs to fit into that space
+NOTE - streams are future objects coming from an async source like socket and anything that is too large and thus should be split in smaller chunks
+NOTE - bodies in hyper are always streamed asynchronously and we have to collect them all together inside a buffer to deserialize from utf8 bytes to a pre defined struct
+NOTE - Box is a none dangling pointer with a usize size and will allocate T size (Box<T>) on the heap to store what's inside of it and allocate nothing on the heap if T is unsized  
+NOTE - to solve the `future is not `Send` as this value is used across an await` error we have to implement the Send trait for that type, since we don't know the type at compile time (it'll specify at runtime due to the logic of the code) we must put the trait inside the Box with the dyn keyword (object safe traits have unknown size at compile time) inside the return type of the function in second part of the Result 
+NOTE - Error, Send and Sync are object safe traits which must be bounded to a type, since we don't know the type in compile time (will be specified at runtime) we must put these trait inside a Box with the dyn keword behind them cause we don't know how much size they will take inside the memory
+NOTE - we can't return a trait inside the function cause the compiler needs to know how much space every function's return type requires and this can't be specified at compile time cause different implementations of a trait need different amount of memory
+NOTE - to return a trait inside the function we have to put it inside a Box with a dyn keyword (due to the dynamic size of the trait) cause a Box is just a reference to some memory in the heap and a reference has a statically known size thus compiler can guarantee it points to a heap allocated the trait that is not a dangling pointer
+NOTE - unwrapping a wrapped Option or Result type using ? will only work inside a method that will return Result or Option
+NOTE - always use &self (a shared immutable pointer or reference) or &mut self (a shared mutable pointer or reference) inside the struct methods' parameters to borrow the ownership of struct fields and the instance itself instead of moving (the borrowed form of struct fields) so we can call other methods' instance and have a valid lifetime for object; also the instance must be defined as mutable in order to use &mut self in methods' parameters
+NOTE - since mutable pointer to a type can change the value of the type thus if we want to mutate the struct field in its methods without losing its ownership we have to use &mut self as the first param of methods 
+NOTE - &self or &mut self will be converted automatically to self on compile time ++++ rust will call the drop() function at runtime for each type at the end of each scope
+NOTE - the trait Clone must be implemented for that struct in order to use & cause Clone is a super trait of Copy otherwise we can't borrow the ownership and take a reference to its field (see Api struct comments!)
+NOTE - a pointer takes usize size (64 bits target takes 64 bits or 8 bytes; 32 bits targets takes 32 bits or 4 bytes) to reference any location in memory 
+NOTE - the size of a boxed value or size_of_val(&Box::new(10)) is equals to the size of the Box which is just a pointer and a pointer takes usize (8 bytes or 4 bytes) to reference any location inside the memory
+NOTE - size of the value inside any smart pointer is equals to the size of the smart pointer itself which is usize  
+NOTE - usize is how many bytes it takes to reference any location in memory, on a 32 bit target, this is 4 bytes and on a 64 bit target, this is 8 bytes
+NOTE - generic type is needed for function returns and types and for those types that haven't fixed size in compile time we have to put them inside the Box or take a reference to them to borrow them using & and the size of the Box is usize and the size of the Box inside heap is the size of the T (on the heap) inside the Box and the Box will have a default valid lifetime for any type inside of it
+NOTE - if the size of the u8 is not specified we have to either use & with lifetime or put it inside a Box in which the lifetime will be handled automatically by the Box itself
+NOTE - since unsized types like traits, closures, str and [u8]s won't have fixed size at compile time they must be either used as a borrowed type using & with a valid lifetime or stored inside the Box which will be stored on the heap and a reference to that location will be returned from the Box thus in order to get the value inside the Box which is owned by the Box itself we have to dereference the Box using *
+NOTE - heap allocated types like String, Vec, traits and closures has 3 machine (usize) words wide which are pointer, length and capacity (for efficient resizing) inside the stack also they can be in their borrowed mode like &String, &Vec, &dyn Trait and &move || {}.
+NOTE - unsized borrowing for abstract types like object safe traits will be done using &dyn Trait/Closure + 'a or Box<dyn Trait/Closure + 'a> with a valid lifetime added at the end and for concrete type is done by using &Type or Box<Type>
+NOTE - we have to put the unknown size at compile time types like object safe traits and closures (which are of type traits) inside the Box due to the face that they don't bound to Sized traits and don't have fixed size at compile time
+NOTE - can't return &[u8] or [u8] in function signature due to unknown size of slice and lifetime constraints we could return either Vec<u8> or Box<[u8]> since Vec<u8> will be coerced to &'a [u8] with a valid lifetime (like 'a) at compile time
+NOTE - string (list) in rust can be either String (Vec) which will be stored on heap or str ([u8]) since beacuse of unknown size of the str ([u8]) we should take a pointer using & to the location of it which is either inside the binary, heap or the stack to pass them by reference between functions or store them inside a variable and they primarily uses are to create slices from String and Vec.
+NOTE - since str and [u8] must be in their borrowed form in the whole app runtime (their size would be 2 machine (usize) words wide; one for the pointer and the other for the length which both of them will be inside the stack) thus in order to return them inside a function we must put them inside the Box like &String, &Vec, &dyn Trait and &move || {} which must be inside the Box to return them in their borrowed form cause we can return them easily in their unborrowed form!
+NOTE - & is used for borrowing and taking a referencing to the location inside the memory of an unknown sized type like [u8] slices
+NOTE - since every type has its own lifetime which which will be destryoed whe it goes to out of its scope it'll prevent us to have a grabage collector system 
+NOTE - we have to pass by reference using & in function param to borrow the ownership of the type (since pointer will be on the stack and stack types won't be moved by passing them into new scope) like passing Vec and String by & to borrow a slice of them and coerce them to &[u8] and &str
+NOTE - the size of a String allocated in memeory is 24 bytes; 64 bits or 8 bytes or usize (usize which is big enough to hold any pointer or offset) for each of pointer, len and capacity on 64 bits system
+NOTE - the size of the &str allocated in memeory (heap or binary or stack) is the total length of that str itself cause it's just the size of the str itself on either stack, heap or binary which is equals to its length of utf8 bytes for example the size of a none emoji word like "wildonion" is 9 bytes with 1 byte for each but the size of "wildn🥲oion" is 13 bytes which is 4 bytes more than the "wildonion" which is because of 🥲 emoji 
+NOTE - the size of the &str allocated in memeory (heap or binary or stack) is less than String and equals to the size of that str in bytes: size_of_val("wildonion") == size_of_val("wildonion".as_bytes()) 
+NOTE - shared reference for a type means that we have multiple owner across the whole app runtime and other threads and we can count them by putting the type inside a Rc<T> smart pointer also we can't dereference them
+NOTE - Vec and String are stored on the heap and their pointer, length and capacity (for resizing) will be stored on the stack; str and [u8] are stored on either heap, binary or the stack at runtime and since they are a slice of String or Vec they must be in their borrowed form using &.
+NOTE - we can't return pointer from the function body due to the borrowing and ownership (instead of garbage collection rule) rule which says that the lifetime of a type will be dropped once it goes out of its scope and due to this fact we can't return pointer from the function body cause it will be a dangled pointer after function scope which is pointing to an empty location with invalid lifetime; therefore we can use Box to put the borrowed type inside of it in order to return it from the function body.
+NOTE - to use unknown sized types like str, [u8], traits and closures at runtime they must have size at compile time and in order to fix this we have to either take a reference to them using & or put them inside the Box if we want to return them from function body.
+NOTE - shared reference can't dereference between threads and can't move out of it cause by moving or dereferencing it it'll lose its ownership and lifetime while some methods and threads are using it; we can sovle this using as_ref() method wich converts a &wrapped type into &T or by cloning the type
+NOTE - build generic using Box in which its content is a sendable and syncable and also static which can be shared between threads safely 
+NOTE - types inside the Box are heap allocated types thus their size is unknown at compile time 
+NOTE - to get the value from the Box we have to dereference them using *
+NOTE - we can put the [u8] inside the Box instead of using & since Box has its own lifetime : Box<str> and Box<[u8]>
+NOTE - we can also use Box instead of using & to borrow the ownership of a type since Box has its own lifetime and & requires a valid lifetime 
+NOTE - future objects are object or async blocks that has been bounded to Future trait and must be solved using .await 
+NOTE - generic, box with traits and lifetime and borrowing and ownership like having multiple immutable pointers but only one mutable at a time
+NOTE - a type can be bounded to traits and lifetimes and it can be a Boxed value in which traits must be inside Box if they want to be a type or impl Trait in function signature 
+NOTE - if the size of the [u8] was known there is no need to borrow it using & since the size is known to the compiler
+NOTE - we can use & to borrow the ownership if the type has no specific size at compile time
+NOTE - since everything must be sized in rust thus if a type is not Sized then we have to take a reference to its memory location and pass it to functions and scopes
+NOTE - as long as the type is valid it's reference must also be valid
+NOTE - Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> means if we want to implement the trait for a type it must be inside Box<dyn > or in form impl Trait in function signature since traits don't have fixed size
+NOTE - a type can be bounded to traits and lifetimes in function signature or inside the Box<dyn> 
+NOTE - type can be a letter or a struct name
+NOTE - pointers are used to borrow the ownership of the type to prevent ownership moving and have their own lifetimes  
+NOTE - raw pointers in rust are c like pointers which are not safe and in order to create them we have to build them from the borrowed from of the type as either const or mut 
+NOTE - if you pass a lifetime inside the function signature that lifetime will be used for all params 
+NOTE - we can use smart pointer since they have their own valid lifetimes
+NOTE - you could either pass the borrow form of the type or put them inside the Box
+NOTE - if the type don't have size like traits we have to put them inside Box<dyn> or Arc<dyn>
+NOTE - we can pass lifetimes to the generic type signature like BoxedFuture<'static> 
+NOTE - futures are async ojects or tasks that can be scheduled for execution to be solved inside the threadpool of an actor by awaiting on them and they must be send sync static across threads
+NOTE - futures inside a free thread will be locked to mutate to avoid race condition and deack lock
+NOTE - we can solve a future object by awaiting on it or block the current thread to solve it
+NOTE - we can avoid dead lock and race condition by putting the type inside the Mutex
+NOTE - xxx.xxx.xxx.xxx : every pack is between 0 up to 255 means utf8 thus every pack has 1 byte length thus the total size of ipv4 is 32 bits or 4 bytes and there is 2^32 combos
+NOTE - by assigning the type to a new type its ownership is moving thus we have to make a copy or clone it since self is of type & means that the &self can be shared between other methods either immutably or mutably 
+NOTE - we have to use Box to create trait types with lifetimes bounded to other generic types since traits are heap allocated data structures
+NOTE - Derive macro generates an impl of the trait with that name for the type that is bounded to
+NOTE - always pass by reference or the borrowed form of the type
+NOTE - clone is impelented for Option thus we can clone the wrapped type with Option
+NOTE - if the type is send and sync thus there is no need to put it inside Arc<Mutex<...>> since it can be cloned and shared safely between threads using mpsc channel or pub/sub channels otherwise it must be inside Arc<Mutex<T>> to share between threads safely and mutate it
+NOTE - since everything in rust has its own lifetime (rust don't have gc) thus in order to return a pointer from function it must have a valid lifetime which can be done by defining a sepecific lifetime in function signature or use the lifetime of the self which is a shared reference and is using by other methods of the struct
+NOTE - to avoid lifetimes in scopes and function signatures we can put the type inside the Box which has its own lifetime and can be dereferenced using * like Box<[u8]>
+NOTE - since [u8] doesn't have fix sized at compile time we must take a reference to it or put it inside the Box
+NOTE - in order to borrow the heap data structures we must take a reference to them and every reference needs a valid lifetime so either we must define their lifetime or put them inside the Box 
+NOTE - pass heap data allocated structure by reference to other scopes to prevent ownership moving since copy trait is not implemented for them and reference contains the address of that heap type and the value in itself
+NOTE - if the type is not Send Sync and also Clone trait is not implemented for that we have to impl Send and Sync trait for that
+NOTE - futures must be Send in multi thread contexts but it's not required in single thread ones
+NOTE - each task needs its own cloned form to be shared between threads means we have to clone the data to share it between threads
+NOTE - traits can't have async method since they are not sized and in order to have async blocks they must be pinned into the memory with a specific size since the size of traits will be the size of the type that the trait will be implemented for that
+NOTE - in actors sending messages are asynchronous means a message sender will not block whether the reader is ready to pull from the mailbox or not, instead the message goes into a queue usually called a mailbox (receiver mailbox like a mpsc job queue channel)
+NOTE - riker actors are used for sending messages and events through their address which is based on mpsc job queue channel instead of blocking the local thread for mutex acquisition
+NOTE - all riker actors are on top of tokio in which every future task like actors communication events and messages will be handled by mpsc job queue channel and multithreading patterns
+NOTE - mpsc channel can be used to communicate between threads while we're using a thread pool to mutate a data structure by locking on the data (Mutex<T>) and blocking the local thread to acquire the mutex and prevent other thread from mutating in a shared state and locking it at a same time to avoid being in dead lock situation
+NOTE - the sender of mpsc channel can be owned by multiple threads but the receiver can only be owned by only one thread at a time, that's because it's called multi producer and single consumer (many threads can send simultaneously to one receiver)  
+NOTE - mutex acquisition is done by waiting on the receiver until a job or task becomes available to down side of the channel then locking on the receiver to acquire the mutex which will block the threads waiting for the lock to becomes available
+NOTE - if a thread was busy another thread will be spawned to handle new task or job coming from the process
+NOTE - we can send a computation result inside the tokio::spawn() through a sender of mpsc job queue channel to the receiver side and let the task inside tokio::spawn() be run in the background
+NOTE - task scheduler or handler like tokio::spawn() or actors address and defined events (Messages) is done through threads communication based on message passing channels like mpsc job queue channel to avoid being in dead lock, shared state and race condition situation
+NOTE - we have to clone the receiver for passing between multiple threads and for mutating what's in it we have to put it inside a Mutex to insure that only one thread can change the content of the receiver at a time
+NOTE - every incoming task or job or message from an opened process (like every stream coming from a socket connection) :
+        - has its own sender in which all messages will be sent asynchronously and they never block the current thread and we can share sender of the mpsc job queue channel of each between multiple threads by getting a clone from it but this is not the same for the receiver
+        - can be an async task spawned by the tokio spawner
+        - must be solved inside an available thread but only one at a time
+        - is a mutex which must be acquired once it's arrived to down side of the channel by locking on the receiver side of the channel which will block the current thread  
+NOTE - streaming all over the incoming chunks of the file to save them one by one inside a buffer located on the client ram on corruption condition to gather those bytes to form the whole file
+NOTE - first allocate some bytes on server ram for the incoming file from the client then on every incoming chunk of the file coming from the client save that chunk into the created file on server from the allocated buffer and seek the cursor to the saved position of the file to resume on reconnecting to the server
+NOTE - DRL model to reward validator in PoS pattern based on coiniXerr NFT owners' feedback  
+NOTE - sharded blockchain means that every shard is an actor which contains multiple blocks and each will communicates with each other using addr object like passing data by calling a contract method inside block a to another contract method inside the block b asyncly
+NOTE - near uses actor based model to call smart contract methods and pass data between them asyncly using their address (Addr object) which means we can have multi threading in wasm file
+NOTE - split sequential input (borsh encoded async future object data) data into smaller part or async task (can be a request coming from an opened socket and each opened socket is a client) with divide and conquer algorithm to feed into the riker actors (processor will choose a free thread from the pool in just a single core to mutex and lock the task to avoid being in deadlock and race condition situations inside the selected thread) and solve them in there separately (run on separate threads in a thread pool of each actor) then send the each result asyncly to other actor if needed; by moving the Arc<Mutex<T>> (use Arc::new(&Arc<Mutex<T>>) to clone the arced and mutexed T which T can also be Receiver<T>) betweeen riker actor threads (clone the mutex to move it between threads since the Copy and Clone traits are not implemented for the Mutex and by putting the Mutex in Arc this issue will be fixed) using mpsc channel which T is the result then combine the results and compile the whole method to wasm like simd and rayon
+NOTE - we'll divide the sequential data into tasks using divide and conquer algo which will be an async job or a task is a closure with async body which contains heavy computation on some mutable Arc<Mutex<T>> like querying a db thus every job must get solved in separate thread by joining its scheduled thread containing the job in parallel to the executor and we can communicate between threads of objects using message passing channels like mpsc
+NOTE - threadpool app examples: sharding based app like blockchains, riker actors, rayon for simultaneous heavy computations and its wasm bindgen which is handled by the simd design pattern, image processing and 3d design apps
+NOTE - it seems that a thread can handle so many task at a time but it's a false fact; due to avoiding dealock and data race condition every single thread can handle a task of type Arc<Mutex<T>> (use Arc::new(&Arc<Mutex<T>>) to clone the arced and mutexed T which T can also be Receiver<T>) at a time but it'll done so fast which it seems that it can handle some many tasks at a time
+NOTE - a load balancer will spread the incoming requests from the clients to server nodes and istances based on network infrastructure and server loads
+NOTE - we can build a high performence pub-sub (producer(s)-consumer(s)) message broker like kafka and rabbitmq using actors since actors features are: threadpool, async mailbox based on mpsc channels, broadcasting Arc<Mutex<event>> channel based on jobq models like mpsc, scheduling message or event and communicating with other actors
+NOTE - shared data state between threads: always borrow in iterating and passing into new scope since rust doesn’t obey any garbage collection rule And In order to pass and share a reference of the encoded type (borsh/serde) between threads the type must be send sync and static across threads
+NOTE - actors are objects that contains busty threads inside to solve incoming tasks in multiple threads and send message between other actors asyncly
+NOTE - based on Mutext concept we can borrow the data multiple times (multiple immutable ownership) by passing it through mpsc channel but mutate it only once at a time inside a thread
+NOTE - actors inside a single code base can communicate through a none socket message passing channel like mpsc but in two different system can communicate with each other through a p2p json rpc (over http2, ws and tcp) calls like near protocol
+NOTE - multi threading (job queue) means sharing Arc<Mutex<T>> (Send + Sync + 'static) which T can also be Receiver<T> between threads to avoid race condition and deadlocks
+NOTE - the task or event (divided using simd) which must be sent between threads or processes must be Arc<Mutex<Task>> or Send Sync static or have valid lifetime acrorss threads or processes
+NOTE - when we want to put traits inside smart pointer we have to use the dyn keyword like Arc<dyn Trait> or Box<dyn Trait>
+NOTE - heap data allocated must be passed by reference (no runtime cost) or clone (runtime cost) to other scope and every reference must have its own lifetime thus we should define a valid lifetime for each reference or put them inside the Box like traits which are heap allocated data structure
+NOTE - self in method must be referenced otherwise the instance will be moved by the first method call 
+NOTE - to return a reference from the function we must have a valid lifetime for that reference since rust doesn't allow us to return a variable which is owned by the function cause it might be a dangling pointer   
+NOTE - in rust lifetimes help to avoid having double free and dangling pointers issue since rust don't have gc
+NOTE - dynamic allocation means that an interface or trait can be implemented for one or multiple types at runtime and can be specified by the dyn keyword inside a Box 
+NOTE - Box is a smart pointer contains a referece with a valid lifetime to the value inside of it by allocating a section inside the heap for that value 
+NOTE - when putting inside the Box the type will be moved thus we can take a reference to that or clone it
+NOTE - usually we can use Box to avoid using lifetimes directly for the heap data types like traits since they must be passed into other scopes like struct fields either by cloning or by taking a reference to them  
+NOTE - use Box instead of taking a direct reference to that type since Box has its own reference and lifetime 
+NOTE - sharing types between scopes and threads is done using channels but the type must be bounded to Send Sync and static means it must be cloneable or share and safe to send its reference or ownsership between threads and scopes and if the type is not clonable we must put it inside the Arc
+NOTE - if we put the first param as &self means we're borrowing the instance of the type (sharded referece) also putting the self will move the instance out of the scope and can't call other methods since the instance is no longer available
+NOTE - if we want to use string or array slices we need to define a lifetime since they are in form of the borrowed type of the actual type (&str is a slice of String and &[] is a slice of Vec) itself thus in every borrowing we need a lifetime since they are a reference to the location of the actual type inside the ram
+NOTE - first the future object will be created then by putting .await in front of it it'll wait until the future gets sovled means its status gets changed from pending to complete
+NOTE - use Arc<Mutex<T>> (use Arc::new(&Arc<Mutex<T>>) to clone the arced and mutexed T which T can also be Receiver<T>) in multithreaded env and RefCell<Rc<T>> in single threaded env also types must be send + sync + static across threads and .awaits
+NOTE - actors will send encoded data through the mpsc channel from their free thread, so we have to deserialize them when we resolve them outside of the fulfilled future object 
+NOTE - every receipt is a transaction with a specific id which will be created by scheduling an ActionReceipt 
+NOTE - scheduling a promise of future object contains the method call (ActionReceipt) and get the resolved of the pending DataReceipt object from the executed future object inside a callback inside where we've scheduled the call 
+NOTE - scheduling an event which is a future object contains an async message like calling one of the method of the second service to be executed and triggered inside the second service and get the response inside a callback method using .then()
+NOTE - incoming scheduled event from a thread of the first service actor inside a free thread of the second service actor must be of type Arc<Mutex<T>> (use Arc::new(&Arc<Mutex<T>>) to clone the arced and mutexed T which T can also be Receiver<T>) in order to avoid data races and dead locks 
+NOTE - stack data types implemented copy trait thus no need to clone them like &str and &[u8] and borrowing using & requires the implementation of the clone trait for the type otherwise can't take a reference to the type and it'll be moved on the first use
+NOTE - traits must be inside box or take a reference to them since they don't have know size at compile time thus they couldn't be a field of the struct directyly
+NOTE - we can return a reference from the function by defining a lifetime inside the function signature or use the self lifetime if its a struct method 
+NOTE - we can return a reference from the function to a struct if we're building the struct and returning it at the same time since building and returning won't store anything inside the stack 
+NOTE - semaphores are variables that have been used in tokio channels to manage thread resources acquisition like the one inside the Mutex structure
+NOTE - we can stream over any kind of data using zmq means we can stream video and audio through the zmq socket 
+NOTE - actors are worker threadpool with a built in job or task queue and a mailbox to send and receive messages from other actors asyncly, also they can schedule a message to be executed later or broadcasted to a specific channel. 
+NOTE - message queues like ZMQ can use actors behind the scene for real-time future object streaming in such a away that the message sender (publisher) can be a response actor and the receiver (subscriber) can be a request actor which can subscribe to the messages received from the publisher and solve them inside its worker theadpool. 
+NOTE - the received message from the subscriber can be scheduled to be executed later using a task queue  like celery or another riker actor.
+NOTE - tokio can spawn async tasks inside its worker green threadpool instead of using native threads which has a little building in jobq channels to move tasks between its threads.
+NOTE - channels in multithreading concepts like mpsc, one shot, broadcast and watch can be used to share tasks between threads and their concepts are same with pub/sub or prod/cons channels in message queues but message queues are using rpc or socket under the hood.
+NOTE - thread safe data types are Arc<Mutex<T>> + Send + Sync and can be shared between worker threadpool safely (deadlock avoidable) using jobq channels (mpsc, oneshot, watch)
+NOTE - the concepts of the channels can be used in multithreading field like mpsc which is used to share a thread safe data between multitple threads in a safe manner that only one consumer can mutate it at the same time although in socket field there is only one socket or a system can mutate the data received by the publisher or the sender socket channel.
+NOTE - every channels either jobq or a socket one can follow the one of the rules of mpsc, one shot, broadcast and watch at a time.
+NOTE - tasks received from receivers that want to be shared between threads (using jobq channels) of an actor worker threadpool must be safe to send (Arc-ed)
+NOTE - jobq channels can be used to share data between threads and also schedule a task to be executed later by poping it out of the queue and they can also be used with message queue like zmq  
+NOTE - fat pointer will be used to take a reference to the dynamic size types like traits and slices to the String (&str<T>) and Vec (&[T]) which contains the length of the dynamic types also
+NOTE - pointers to the dynamic size types like traits and slices like &str and &[T] are fat pointers they contains extra 8 bytes (or usize) to store the length of the referenced type and because of this the address of the objects and pointers are different with the traits addresses since the address of traits contains 16 hex chars which will be 16 * 4 bytes long hence the pointer of none traits and traits are not equals  
+NOTE - traits must be referenced either by &dyn Trait or Box<dyn Trait> which dyn keyword is fixed in both usage
+NOTE - tokio channels are being used between multiple threads which shares Arc<Mutex<T>> between threads safety
+NOTE - pub/sub channels are being used to send async tasks between two services actors through the RPC, socket or struct which can also schedule the task to be executed later
+NOTE - Option requires the type to be Sized because it allocates on the stack. All type parameters to a concrete type definition are bound to Sized by default. Some types choose to opt out with a ?Sized bound but Option does not.
+NOTE - pointers takes usize bytes (depends on os arch either 32 bits or 64 bits) also fat pointers takes 8 bytes since they contains extra 4 bytes to store the length of the dynamic types 
+NOTE - array is a contiguous space inside the ram in which accessing the first offset will return the value of that offset which is the first value inside the array since the operation is O(1) thus we can store all the hashes of all the keys inside an array to access their value with O(1) time
+NOTE - taking a reference to the type is more chipper thant cloning since by taking reference a pointer will be created which contains the address of that type that the type might be stored in heap or stack
+NOTE - since everything must be sized in rust thus we have to pass the dynamic types like Vec, String and traits either by reference or cloning into other scopes and threads (using tokio channels) also their pointers are fat ones
+NOTE - since references lifetime must be valid in rust to avoid dangling pointer issue thus if we want to take a reference to dynamic types the reference must have a valid lifetime we can define ourself inside struct field or the function signature or put them inside Box since Box is a smart pointer and can handle lifetime on its own 
+NOTE - since dynamic type sizes are not specified at compile time in order to pass them into other scopes and threads they must be referenced during the app either directly using & with a valid lifetime or by putting them inside the Box which can handle the lifetime on its own
+NOTE - since dynamic types like Vec, String and traits are on the heap by passing them into new scopes they will be moved by rust compiler from the heap in order to free the memory location that they've just allocated to free up some huge space at runtime and this why rust doesn't have garbage collector, the solution is to borrow the ownership of them either by cloning which is expensive or by taking a reference to them to create a pointer which will point to the location of their heap and is good to know that their pointers are fat ones since there are extra bytes which has been dedicated to their length inside the heap also the pointer must have valid lifetime across scopes in order to avoid dangling pointer issue which we can achive this either by defining a lifetime in struct, enum fields or function signatur or by putting them inside the Box (with dyn keyword for trait) which is a smart pointer and have a valid lifetime in itself
+NOTE - always pass by reference to borrow the ownership or clone it otherwise if the type doesn't implement the Copy trait it'll be moved into the new scope and its lifetime will be dropped because rust dont't have fucking GC
+
+
+
+
+
+
+
+
+
+
+--------------------------------------------------------------------------------------------------------------
+/ --------------------------------------------------------------------------------------------------------------
+| solving all incoming tasks of a process simultaneously inside the thread pool created for 
+| that process (like a socket) by sending each task into a free thread (a none blocked thread; one thread for each incoming task)
+| is done using message passing channels like job mpsc queue channel protocol which is an asynchronous
+| message passing channel.
+|
+|
+|
+| shared state can be accessed by multiple threads at the same time and must be protected like 
+| using a mutex lock or actors which are a multithread task scheduler and communicate with 
+| each other through their address and defined events (Messages); 
+| each actor has its own mailbox and isolated state cause there is no shared state in actors 
+| and the interaction between actors is purely based on asynchronous messages like mpsc job queue channel.
+|
+|
+|
+| tokio::spawn() will spawn an async task (of type future) in the background (don’t need to await on them) 
+| so we can solve multiple tasks or multiple processes concurrently and simultaneously inside a single thread 
+| in the background of the app without making a thread pool for each process or task, since tokio::spawn() 
+| itself uses multiprocessing and green thread - threads that are scheduled by a runtime library or 
+| VM instead of natively by the underlying OS - concepts in its runtime for solving tasks. 
+\ --------------------------------------------------------------------------------------------------------------
+  --------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+        
+[🚨] we can save each tokio::spawn() inside a vector of type JoinHandle (like OS threads) to await on them one by one later 
+    on to block their running background task to get the computation result of their async task or we can send their computation 
+    results through the mpsc job queue channel between other tasks.
+
+[🚨] tokio::spawn() is an asynchronous multithreaded (green threads) worker and event loop based task spawner and scheduler which takes 
+    an async task of type future of a process and shares it between its threads using its job queue channel protocol so every 
+    type in the task must be Send + Sync + 'static and cloneable.
+
+[🚨] we can't borrow data inside Arc as mutable if we have a an object in which one of its method has &mut self as its first argument 
+    and needs to mutate a field like run_time_info add() method in which the info_dict field will be updated. 
+
+[🚨] to solve above issue we have to put that object inside a Mutex (&mut) to share its ownership (Arc) and protect it between multiple 
+    threads and mutating or mutex acquisition is done by blocking the current thread when calling the lock() method, prevent 
+    from being in a dead lock and shared state situations.
+
+[🚨] & is used to take a reference or borrow the ownership; for Copy trait bounded type this means coping the type by borrowing 
+    its ownership and &mut is a mutable pointer to that for changing it.
+
+[🚨] Arc (we use Arc if the type wasn't bounded to Clone trait) is used to share the ownership of data and move it between threads 
+    safely with Mutex; we can change and mutate the data (also inside Arc) by locking the local or current thread at runtime to acquire the mutex.
+
+[🚨] Box is a smart pointer and is used along with the dyn keyword instread of &dyn to take 
+    a reference to object safe traits which are not bounded to Sized and Copy traits.
+
+[🚨] when an actor is created, it gets its own mailbox for receiving messages and other interested actors are notified 
+    about the new actor joining the system also riker actors are Futures and run as Futures on the underlying threadpool
+    also all riker data structures are Send Sync and have a valid lifetimes across threads.
+
+[🚨] in actor programming we have worker threadpool and jobq like rmq or kafka in which their 
+    communication between subs and pubs are based on rpc channels.
+
+[🚨] ActorRef is a lightweight type that is inexpensive to clone and can be used to interact with its underlying Actor or the struct itself, 
+    such as sending messages to it also is a reference to the actor.
+
+[🚨] ActorRef always refers to a specific instance of an actor, when two instances of the same Actor are started, 
+    they're still considered separate actors, each with different ActorRefs.
+
+[🚨] ActorRefs are inexpensive and they contain a reference to the actor struct itself also can be cloned and sent as a message to another actor.
+
+[🚨] remote_handle() method turns this future into a future that yields () on completion and sends its output to another future on a separate task
+    and can be used with spawning executors to easily retrieve the result of a future executing on a separate task or thread.
+
+[🚨] actors can communicate with each other asyncly only by sending defined message events since they are isolated inside the ActorRef and never expose their state or behavior, 
+    they can solve incoming task in their threadpool (inside a free thread) also an actor which might be a channel can broadcast message events 
+    inside the channel so other subscriber actors which are interested to that message event can subscribe to that event. 
+
+[🚨] since we're using tokio::spawn(async move{}) inside the loop we have to pass what ever we want to use it 
+    inside the loop through the mpsc job queue channel cause async move{} will move all vars from its behind to the new scope
+
+[🚨] calling between actors and broadcasting message events id sone by calling tell() method on actors
+
+[🚨] there is no guaranteed order of execution for spawns, given that other threads may steal tasks at any time, however, they are generally prioritized in a LIFO order 
+    on the thread from which they were spawned, other threads always steal from the other end of the deque, like FIFO order, the idea is that recent tasks are most likely to be fresh 
+    in the local CPU's cache, while other threads can steal older stale tasks.
+
+[🚨] spawning native threads are too slow since thread handling in rust is depends on user base context switching means that 
+    based on the load of the IO in the app rust might solve the data load inside another cpu core and use multiprocessing approach:
+        • https://www.reddit.com/r/rust/comments/az9ogy/help_am_i_doing_something_wrong_or_do_threads/
+        • https://www.reddit.com/r/rust/comments/cz4bt8/is_there_a_simple_way_to_create_lightweight/
+
+[🚨] in building multithreading apps sending data between threads must be done by using jobq channels like mpsc job queue to avoid being in deadlock and race condition situations
+
+[🚨] actors are workers which uses jobq algos like mpsc job queue channels like celery algos which is based on pub/sub or prod/cons manner and task scheduling 
+    to send message events or jobs or tasks asyncly between other actors and the system like req/res format 
+    to execute them inside their free thread from the worker threadpool.
+
+[🚨] messages or the data must be Send Sync static and Arc<Mutex<Message>> to share between actor threads for mutating
+
+[🚨] mpsc job queue means multiple threads can read the data which is Send + Sync + 'static or multiple sender can be cloned but only one thread or receiver can mutate the data
+
+[🚨] the three causes of data races
+        • Two or more pointers access the same data at the same time.
+        • At least one of the pointers is being used to write to the data.
+        • There’s no mechanism being used to synchronize access to the data
+
+[🚨] the three rules of ownership
+        • Each value in Rust has a variable that’s called its owner.
+        • There can only be one owner at a time.
+        • When the owner goes out of scope, the value will be dropped.
+
+[🚨] the two rules of references
+        • At any given time, you can have either one mutable reference or any number of immutable references.
+        • References must always be valid.
+
+[🚨] a jobq uses channels to share data between threads and one of them is mpsc job queue which means that multiple 
+    sender can be shared between threads but only one consumer can be used by a thread 
+    at a time since the consumer in mpsc job queue is not shareable and cloneable.
+
+[🚨] we can pass a mutex through the mpsc job queue channel to other threads to allow the thread mutate the content of that 
+    type by locking on that type which prevent other threads from mutating the type.
+
+[🚨] workers is the number of threads used in a threadpool amd jobs is the number of tasks that must be solved inside the worker threadpool
+
+[🚨] jobq channel is an async queue like mpsc that can schedule the received jobs, events or tasks (a method or a closure) 
+    from the sender side of the channel asyncly and execute them inside its worker threadpool, actors use this pattern
+    to transfer their tasks between their worker threadpools.
+    
+
+
+
+
+
+
+Cassandra Explanations:
+    [+] A primary key uniquely identifies a row, composed of partition key(s) [and optional clustering keys(or columns)]
+    [+] A composite key is a key formed from multiple columns.
+    [+] A partition key is the primary lookup to find a set of rows, i.e. a partition. The hash value of Partition key is used to determine the specific node in a cluster to store the data [multiple nodes are within a cluster or datacenter]
+    [+] A clustering key is the part of the primary key that isn't the partition key and defines the ordering within a partition or responsible node and it's replicas.
+    [+] Compound Primary Key: The clustering keys are optional in a Primary Key. If they aren't mentioned, it's a simple primary key. If clustering keys are mentioned, it's a Compound primary key.
+    [+] Composite Partition Key: Using just one column as a partition key, might result in wide row issues (depends on use case/data modeling). Hence the partition key is sometimes specified as a combination of more than one column.
+    [+] All select and insert queries must be specified a partition key or a set of these keys, if the key doesn't exist it'll insert otherwise i'll update because of caching strategy.
+    [+] Cassandra is based on column family architecture, means that you can insert a row filled just a few columns only and not all of them and according to this architecture cassandra can store 2 billions cells (rows X column key X column value).
+    [+] Each row will be inside a partition and the node to put that partition into will choose based on the range number returned by hashing of row partition key function, for example node1 will have a partition containing all rows with hashed keys between 20 up to 45.
+    [+] Rows inside its own partition (which is in its related node) will be order based on their clustering key.
+    [+] Every node owns a specific partition(contains rows) and copies(replicas) of each partition in its node will be inside another node.
+    [+] A logical grouping of cassandra nodes within the ring are called rack and cassrandra uses it to ensure that replicas are distributed among different logical groupings.
+    [+] The partition key must be supplied for every read operation in order to fetch from its partition inside the node that owns the hash of this partition key, cause each node owns a set of keys or a range of numbers that shows this node only accepts these hash of keys.
+    [+] When some query should be performed inside a cdrs_tokio session in our cluster:
+        Load balancer should balance between all the ndoes inside the cluster(datacenter)
+        Load balancer must select a node according to its strategy
+        Load balancer will returns a pool of connections for the selected node
+        CDRS gets from bb8 pool one of available connections
+    [+] Examples:
+        PRIMARY KEY (a): The partition key is a.
+        PRIMARY KEY (a, b): The partition key is a, the clustering key is b.
+        PRIMARY KEY ((a, b)): The composite partition key is (a, b).
+        PRIMARY KEY (a, b, c): The partition key is a, the composite clustering key is (b, c).
+        PRIMARY KEY ((a, b), c): The composite partition key is (a, b), the clustering key is c.
+        PRIMARY KEY ((a, b), c, d): The composite partition key is (a, b), the composite clustering key is (c, d).
+    [+] All cassandra nodes or cassandra servers are inside a cluster(datacenter) and we can combine these clusters(datacenters) to create racks cloud based database. 

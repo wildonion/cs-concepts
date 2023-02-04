@@ -31,6 +31,7 @@
 * zmq pub/sub socket for async I/O event streaming like audio and video
 * rpc capnp
 * hyper
+* juniper gql
 
 #### 🎭 actor concepts:
 * mailbox to receive async messages from other actors or other functions inside different part of the app  

@@ -78,7 +78,7 @@
   * video and audio codec, compressor and streamer like ffmpeg
   * cryptography
   * bridge between blockchains
-  * language binding like writing rust code on top of apis of the compiled (.so) code in c like rust bindings to libsodium
+  * language binding like writing rust code on top of apis of the compiled (.so) code in c like rust bindings to libsodium or coding c like syntax using extern, unsafe and mangle proc macro attribute to generate c shared objects, headers and libraries to load in other c based langs 
   
 ## 🤖 AI
   #### 💡 SSL (Self Supervised Learning) concepts:

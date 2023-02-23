@@ -34,30 +34,31 @@
 * juniper gql
 
 #### 🎭 actor concepts:
-* mailbox to receive async messages from other actors or other functions inside different part of the app  
-* pub/sub channels for broadcasting, executing and scheduling async tasks using tokio cron scheduler 
-* tokio worker green threadpool to run task in other threads using `tokio::spawn(async move{})`
-* rpc capnp based communication with outside world actors to call each other methods directly 
-* tokio message queue channles like mpsc and oneshot for sharing Arc<Mutex<T>>: Send + Sync + 'static between threads and different parts of the app 
-* tokio event loop using `tokio::select!{}` to select an async I/O event task
+libp2p stacks can be built on top of the ZMQ pubsub sockets over TCP or UDP which supports various socket protocols for streaming borsh or serde encoded data also each socket in ZMQ is an actor like riker in which:
+* is a message passing concurrency model that avoids deadlocks and low level data races.
+* the message queue of each actor is a tokio job queue channel to share `Arc<Mutex<Data>> + Send + Sync + 'static` between different parts of the app in multithreading contexts like solving the received async task inside the mailbox from other actors in tokio worker green threadpool.
+* each actor can communicate with each other through pubsub message passing protocol in which the publisher actor can publish or broadcast a message with a specific topic and a message then an interested subscriber can subscribe to that topic and get the message to put in inside its mailbox to solve it by sharing it using tokio job queue channel inside its threadpool.
+* with actor system we can schedule a task using tokio cron scheduler to be executed at a specific time inside a specific actor and from there the actor can do the rest by popping out the task from its message queue channel to solve it inside its threadpool.
+* there is an event loop and a threadpool inside each actor in which it execute an async I/O task from the loop using `tokio::select!{}` once it gets solved by the flow of the code inside its threadpool which can be the `tokio::spawn()`.
+* actors on two different devices can call directly each other method using RPC pubsub pattern based on capnp protocol.
 
 #### 💡 concepts:
 * distributed (replication and sharding) and decentralized concepts:
-  * search, db and routing engines like elastic, cassandra and p2p kademlia: 
   * create best objective function to find the most rewarded (less cost actions) path in the network graph env (route planning) greedily using:
-  * hybrid tech algorithms like NN, GA 🧬 and neurofuzzy(ANFIS)
-  * gradient optimization methods like stochastic gradient descent 
-  * none gradient optimization methods like GA and FA
-  * graph theory and heuristic search algorithms like DAG, dijkstras, floyd, bellman, DFS, BFS and A*
-  * reinforcement learning algorithms like qlearning using mdp and bellman equation with off and on policy methods based on markov decision process and markov chain
-  * other algorithms using greedy, dynamic programming, backtracking, divide and conquer, recursive and brute forcing methods
-  * hashmap based algos like hash tables (DHT) to find closest peers to a specific range of key inside a replication like cassandra db and p2p nodes    
-  * rpc capnp for actor method based communication on two different machines like calling between smart contract actors
-  * tokio tcp and udp and jobq channels for sharing Arc<Mutex<T>>: Send + Sync + 'static between actor threads in a same machine
-  * actor tokio worker green threadpool and message queue for task and method broadcasting and scheduling to the pub/sub channels (tokio jobq, socket or rpc)
-  * pub/sub and other zmq socket actors to broadcast from publishers to subscribers (m2m) using sockets
-  * in libp2p peers can find each other using either mDNS (over LAN) or kademlia (over WAN)
-  * in libp2p peers can communicate with each other based on pub/sub floodsub or gossipsub protocols on top of rpc capnp, tokio udp and tcp, websocket, webrtc, zmq like sockets (req/res, cli/srv or pub/sub) actors
+      * hybrid tech algorithms like NN, GA 🧬 and neurofuzzy(ANFIS)
+      * gradient optimization methods like stochastic gradient descent 
+      * none gradient optimization methods like GA and FA
+      * graph theory and heuristic search algorithms like DAG, dijkstras, floyd, bellman, DFS, BFS and A*
+      * reinforcement learning algorithms like qlearning using mdp and bellman equation with off and on policy methods based on markov decision process and markov chain
+      * other algorithms using greedy, dynamic programming, backtracking, divide and conquer, recursive and brute forcing methods
+      * hashmap based algos like hash tables (DHT) to find closest peers to a specific range of key inside a replication like cassandra db and p2p nodes 
+  * search, db and routing engines like elastic, cassandra and p2p kademlia: 
+      * rpc capnp for actor method based communication on two different machines like calling between smart contract actors
+      * tokio tcp and udp and jobq channels for sharing Arc<Mutex<T>>: Send + Sync + 'static between actor threads in a same machine
+      * actor tokio worker green threadpool and message queue for task and method broadcasting and scheduling to the pub/sub channels (tokio jobq, socket or rpc)
+      * pub/sub and other zmq socket actors to broadcast from publishers to subscribers (m2m) using sockets
+      * in libp2p peers can find each other using either mDNS (over LAN) or kademlia (over WAN)
+      * in libp2p peers can communicate with each other based on pub/sub floodsub or gossipsub protocols on top of rpc capnp, tokio udp and tcp, websocket, webrtc, zmq like sockets (req/res, cli/srv or pub/sub) actors
  * proxy, firewall, vpns, packet sniffer and load balancer like pingora, HAproxy, v2ray and wireshark for all layers concepts:
    * v2ray and tor protocols
    * decompress encoded packet 

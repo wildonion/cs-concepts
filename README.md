@@ -2,6 +2,8 @@
 
 * https://rust-unofficial.github.io/patterns/
 
+* https://github.com/steadylearner/Rust-Full-Stack/
+
 * https://book.avr-rust.com/001-introduction.html
     
 * https://nnethercote.github.io/perf-book/title-page.html

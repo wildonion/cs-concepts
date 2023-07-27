@@ -423,7 +423,33 @@ NOTE - derefence a mutable type might be not safe since the underlying data can 
 
 
 
-
+---> basically an actor is an smart data structure that can solve async tasks inside of itself using multithreading concetps 
+    (mailbox which uses jobq channels(prod/con) in such a away that works like there is a semaphore behind the scene which 
+    controls the total references came to producer or the sender and once the sender sent the data we can receive it in 
+    receiver in another thread for context switching, send + sync + mutex, spawn, select) also actor can be used to build 
+    data streaming queue system like redis pubsub using topic, partition, future objects, offset, timestamp, tokio tcp quic 
+    concetps on the other hand actor mailbox which is a jobq channel(prod/con) receives the message then it’ll run the handler 
+    against the type of the message inside its threadpool by sending the message between multiple threads using jobq channels 
+    then send the result back to the caller asyncly, the task solving system uses Arc, Mutex, spawn, select, jobq channels(prod/con) 
+    for streaming over IO future objects coming from a jobq channel or from an io source or inside an scheduler in the background 
+    using tokio spawn (also we can add code expiration using tokio cron and time interval) and StreamExt trait (to read the 
+    future objects) like redis pubsubs to avoid blocking issues
+---> with zero copy deserialization, all bytes from the account's backing RefCell<&mut [u8]> are simply re-interpreted as a reference 
+    to the data structure. no allocations or copies necessary. this is how we can get around the stack and heap limitations since 
+    there is no duplicate stack allocation also can't move out of self if it's behind mutable or shared pointer | enum size and tag, 
+    option size and null pointer optimisation, zero copy deser, borsh on enum for unique storage key
+---> with macros we can extend the AST by converting the input TokenStream into a new AST that can be attached to the existing one
+---> *boxed_type will return the actual type inside the Box since Box is an smart pointer to its underlying type
+---> we can use let to create values with longer lifetime on stack, Box on heap, static and const on ram segment data section
+---> save data structure in ram buffer by serializing it into utf8 bytes
+---> Box::pin(async move{}) and Pin::new(&mut pointer) and Boxed future
+---> & will add clone for the type cause Clone is a super trait of Copy
+---> async trait and associative bounding Trait::method(): Send and ?async and ?const, &mut
+---> future + Unpin, Send + Sync + ‘lifetime | &’lifetime self | &mut type | box, pin, unpin 
+---> ‘lifetime, generic, traits and macros, closure traits, array of traits like &[&dyn Fn()]
+---> borrowing and rc and refcell, gat in traits as context, Box or & with valid lifetime
+---> coerce Vec and String to &[] and &str, &[&[u8; size]], as_ref(), as_mut(), clone(), to_owned() converts slices to heap data note that slice types need a valid lifetime if they are going to be used in struct fields
+---> casting to traits using raw pointers like let pointer = &instance as *const dyn Trait (trait must be implemented for the type and also instance must be a closure if we're casting it into a closure)
 
 
 

@@ -438,6 +438,8 @@ NOTE - derefence a mutable type might be not safe since the underlying data can 
     to the data structure. no allocations or copies necessary. this is how we can get around the stack and heap limitations since 
     there is no duplicate stack allocation also can't move out of self if it's behind mutable or shared pointer | enum size and tag, 
     option size and null pointer optimisation, zero copy deser, borsh on enum for unique storage key
+    ref::::: https://github.com/wildonion/uniXerr/blob/a30a9f02b02ec7980e03eb8e31049890930d9238/infra/valhalla/coiniXerr/src/schemas.rs#L1621C6-L1621C6
+    ref::::: https://github.com/wildonion/uniXerr/blob/a30a9f02b02ec7980e03eb8e31049890930d9238/infra/valhalla/coiniXerr/src/utils.rs#L640
 ---> with macros we can extend the AST by converting the input TokenStream into a new AST that can be attached to the existing one
 ---> *boxed_type will return the actual type inside the Box since Box is an smart pointer to its underlying type
 ---> we can use let to create values with longer lifetime on stack, Box on heap, static and const on ram segment data section

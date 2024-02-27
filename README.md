@@ -9,6 +9,8 @@
 
 * Read More About [AES256 CBC](https://github.com/wildonion/thecry?tab=readme-ov-file#-aes-256-cbc-decryption-process)
 
+* [My playground](https://github.com/wildonion/rusty/)
+
 
 ## 📚 blogs and books:
 
